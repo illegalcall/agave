@@ -266,6 +266,16 @@ impl ThreadArg for IpEchoServerThreadsArg {
     fn min() -> usize {
         solana_net_utils::MINIMUM_IP_ECHO_SERVER_THREADS.get()
     }
+
+    fn max() -> usize {
+        Self::max_for_cpu_count(num_cpus::get())
+    }
+}
+
+impl IpEchoServerThreadsArg {
+    fn max_for_cpu_count(cpu_count: usize) -> usize {
+        std::cmp::max(Self::min(), cpu_count)
+    }
 }
 
 struct RayonGlobalThreadsArg;
@@ -382,5 +392,27 @@ impl ThreadArg for TvuShredSigverifyThreadsArg {
 
     fn default() -> usize {
         get_thread_count()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{IpEchoServerThreadsArg, ThreadArg};
+
+    #[test]
+    fn test_ip_echo_server_threads_max_is_clamped_for_low_cpu_count() {
+        assert_eq!(
+            IpEchoServerThreadsArg::max_for_cpu_count(1),
+            IpEchoServerThreadsArg::min()
+        );
+    }
+
+    #[test]
+    fn test_ip_echo_server_threads_max_tracks_cpu_count_above_minimum() {
+        let minimum = IpEchoServerThreadsArg::min();
+        assert_eq!(
+            IpEchoServerThreadsArg::max_for_cpu_count(minimum + 3),
+            minimum + 3
+        );
     }
 }
