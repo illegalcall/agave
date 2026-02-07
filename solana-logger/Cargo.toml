@@ -1,0 +1,12 @@
+[package]
+name = "solana-logger"
+version = "3.0.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "solana_logger"
+path = "src/lib.rs"
+
+[dependencies]
+agave-logger = { path = "../logger" }

@@ -8772,6 +8772,7 @@ dependencies = [
  "solana-keypair",
  "solana-ledger",
  "solana-measure",
+ "solana-message",
  "solana-metrics",
  "solana-native-token",
  "solana-net-utils",
@@ -9272,6 +9273,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "solana-logger"
+version = "3.0.0"
+dependencies = [
+ "agave-logger",
+]
+
+[[package]]
 name = "solana-measure"
 version = "4.0.0-alpha.0"
 
@@ -9297,8 +9305,11 @@ dependencies = [
  "serde",
  "serde_derive",
  "solana-address 1.1.0",
+ "solana-frozen-abi",
+ "solana-frozen-abi-macro",
  "solana-hash 3.1.0",
  "solana-instruction",
+ "solana-logger",
  "solana-sanitize",
  "solana-sdk-ids",
  "solana-short-vec",
@@ -11425,6 +11436,8 @@ dependencies = [
  "serde",
  "serde_derive",
  "solana-address 2.1.0",
+ "solana-frozen-abi",
+ "solana-frozen-abi-macro",
  "solana-hash 4.0.1",
  "solana-instruction",
  "solana-instruction-error",

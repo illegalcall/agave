@@ -21,10 +21,6 @@ use {
 
 pub(crate) const MAX_WALLCLOCK: u64 = 1_000_000_000_000_000;
 pub(crate) const MAX_SLOT: u64 = 1_000_000_000_000_000;
-/// Maximum number of hashes in AccountsHashes a node publishes
-/// such that the serialized size of the push/pull message stays below
-/// PACKET_DATA_SIZE.
-const MAX_ACCOUNTS_HASHES: usize = 16;
 
 pub(crate) type VoteIndex = u8;
 // Until the cluster upgrades we allow votes from higher indices
@@ -118,7 +114,7 @@ pub(crate) fn new_rand_timestamp<R: Rng>(rng: &mut R) -> u64 {
 impl CrdsData {
     /// New random CrdsData for tests and benchmarks.
     pub(crate) fn new_rand<R: Rng>(rng: &mut R, pubkey: Option<Pubkey>) -> CrdsData {
-        let kind = rng.random_range(0..8);
+        let kind = rng.random_range(0..6);
         // TODO: Implement other kinds of CrdsData here.
         // TODO: Assign ranges to each arm proportional to their frequency in
         // the mainnet crds table.
@@ -126,13 +122,11 @@ impl CrdsData {
             0 => CrdsData::from(ContactInfo::new_rand(rng, pubkey)),
             // Index for LowestSlot is deprecated and should be zero.
             1 => CrdsData::LowestSlot(0, LowestSlot::new_rand(rng, pubkey)),
-            2 => CrdsData::LegacySnapshotHashes(LegacySnapshotHashes::new_rand(rng, pubkey)),
-            3 => CrdsData::AccountsHashes(AccountsHashes::new_rand(rng, pubkey)),
-            4 => CrdsData::Vote(rng.random_range(0..MAX_VOTES), Vote::new_rand(rng, pubkey)),
-            5 => CrdsData::RestartLastVotedForkSlots(RestartLastVotedForkSlots::new_rand(
+            2 => CrdsData::Vote(rng.random_range(0..MAX_VOTES), Vote::new_rand(rng, pubkey)),
+            3 => CrdsData::RestartLastVotedForkSlots(RestartLastVotedForkSlots::new_rand(
                 rng, pubkey,
             )),
-            6 => CrdsData::RestartHeaviestFork(RestartHeaviestFork::new_rand(rng, pubkey)),
+            4 => CrdsData::RestartHeaviestFork(RestartHeaviestFork::new_rand(rng, pubkey)),
             _ => CrdsData::EpochSlots(
                 rng.random_range(0..MAX_EPOCH_SLOTS),
                 EpochSlots::new_rand(rng, pubkey),
@@ -233,25 +227,6 @@ impl Sanitize for AccountsHashes {
             }
         }
         self.from.sanitize()
-    }
-}
-
-impl AccountsHashes {
-    /// New random AccountsHashes for tests and benchmarks.
-    pub(crate) fn new_rand<R: Rng>(rng: &mut R, pubkey: Option<Pubkey>) -> Self {
-        let num_hashes = rng.random_range(0..MAX_ACCOUNTS_HASHES) + 1;
-        let hashes = std::iter::repeat_with(|| {
-            let slot = 47825632 + rng.random_range(0..512);
-            let hash = Hash::new_unique();
-            (slot, hash)
-        })
-        .take(num_hashes)
-        .collect();
-        Self {
-            from: pubkey.unwrap_or_else(solana_pubkey::new_rand),
-            hashes,
-            wallclock: new_rand_timestamp(rng),
-        }
     }
 }
 
@@ -591,82 +566,8 @@ mod test {
     }
 
     #[test]
-    fn test_deprecated_values_fail_deserialization() {
+    fn test_lowest_slot_deserialization_round_trip() {
         let keypair = Keypair::new();
-
-        // NodeInstance
-        let node_instance = CrdsData::NodeInstance(NodeInstance {
-            from: keypair.pubkey(),
-            wallclock: timestamp(),
-            timestamp: 0,
-            token: 0,
-        });
-        let bytes = bincode::serialize(&node_instance).unwrap();
-        assert!(bincode::deserialize::<CrdsData>(&bytes[..]).is_err());
-
-        #[derive(serde::Serialize)]
-        struct LegacyVersion1Mirror {
-            major: u16,
-            minor: u16,
-            patch: u16,
-            commit: Option<u32>,
-        }
-
-        let legacy_v1: solana_version::v1::Version = {
-            let bytes = bincode::serialize(&LegacyVersion1Mirror {
-                major: 0,
-                minor: 0,
-                patch: 0,
-                commit: None,
-            })
-            .unwrap();
-            bincode::deserialize(&bytes).unwrap()
-        };
-
-        // LegacyVersion
-        let legacy_version = CrdsData::LegacyVersion(LegacyVersion {
-            from: keypair.pubkey(),
-            wallclock: timestamp(),
-            version: legacy_v1,
-        });
-        let bytes = bincode::serialize(&legacy_version).unwrap();
-        assert!(bincode::deserialize::<CrdsData>(&bytes[..]).is_err());
-
-        // Version
-        let version = CrdsData::Version(Version {
-            from: keypair.pubkey(),
-            wallclock: timestamp(),
-            version: solana_version::v2::Version::default(),
-        });
-        let bytes = bincode::serialize(&version).unwrap();
-        assert!(bincode::deserialize::<CrdsData>(&bytes[..]).is_err());
-
-        // LegacyContactInfo
-        let legacy_contact_info = CrdsData::LegacyContactInfo(LegacyContactInfo::default());
-        let bytes = bincode::serialize(&legacy_contact_info).unwrap();
-        assert!(bincode::deserialize::<CrdsData>(&bytes[..]).is_err());
-
-        // AccountsHashes
-        let mut rng = rand::rng();
-        let accounts_hashes =
-            CrdsData::AccountsHashes(AccountsHashes::new_rand(&mut rng, Some(keypair.pubkey())));
-        let bytes = bincode::serialize(&accounts_hashes).unwrap();
-        assert!(bincode::deserialize::<CrdsData>(&bytes[..]).is_err());
-
-        // LegacySnapshotHashes
-        let legacy_snapshot_hashes = CrdsData::LegacySnapshotHashes(
-            LegacySnapshotHashes::new_rand(&mut rng, Some(keypair.pubkey())),
-        );
-        let bytes = bincode::serialize(&legacy_snapshot_hashes).unwrap();
-        assert!(bincode::deserialize::<CrdsData>(&bytes[..]).is_err());
-
-        // LowestSlot(1, ...)
-        let lowest_slot =
-            CrdsData::LowestSlot(1, LowestSlot::new(keypair.pubkey(), 0, timestamp()));
-        let bytes = bincode::serialize(&lowest_slot).unwrap();
-        assert!(bincode::deserialize::<CrdsData>(&bytes[..]).is_err());
-
-        // LowestSlot(0, ...) -> should be deserialized successfully
         let lowest_slot =
             CrdsData::LowestSlot(0, LowestSlot::new(keypair.pubkey(), 0, timestamp()));
         let bytes = bincode::serialize(&lowest_slot).unwrap();
